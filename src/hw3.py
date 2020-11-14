@@ -55,7 +55,7 @@ def read_json_files(root_path, spark):
 
     data = spark.read.json(all_json, multiLine=True)
     data.createOrReplaceTempView("data")
-    return all_json
+    return data
 
 
 def get_title_abstract_text(spark, data):
