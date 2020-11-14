@@ -27,80 +27,96 @@ Reading this data with pyspark - done
 https://www.kaggle.com/jonathanbesomi/cord-19-sources-unification-with-pyspark-sql
 """
 
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import matplotlib.pyplot as plt
-
 plt.style.use('ggplot')
 import glob
+import json
 
 from pyspark.sql import SparkSession
+from pyspark import SparkConf, SparkContext
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType
+from pyspark.ml.feature import CountVectorizer, Tokenizer, StopWordsRemover
+from pyspark.sql.functions import monotonically_increasing_id
+from pyspark.ml.clustering import LDA
+from pyspark.ml.linalg import Vectors, SparseVector
+from pyspark.sql.functions import col, size
 
+# Spark setup
+conf = SparkConf().setMaster("local").setAppName("HW3-data-exploration")
+sc = SparkContext(conf=conf)
+spark = SparkSession(sc)
 
-def init_spark():
-    spark = SparkSession.builder.appName("HW3-data-exploration").getOrCreate()
-    return spark
+# Get all json files
+root_path = '../data/archive/'
+all_json = glob.glob(f'{root_path}/**/*.json', recursive=True)
+print("There are ", len(all_json), "sources files.")
+#todo - for now restrict this to 100 files
+# all_json = all_json[:100]
 
+data = spark.read.json(all_json, multiLine=True)
+data.createOrReplaceTempView("data")
 
-def read_metadata(root_path, spark):
-    metadata_path = f'{root_path}/metadata.csv'
-    meta_df = spark.read.option("header", True).csv(metadata_path)
-    return meta_df
-
-
-def read_json_files(root_path, spark):
-    all_json = glob.glob(f'{root_path}/**/*.json', recursive=True)
-    # todo - for now restrict this to 100 files
-    all_json = all_json[:100]
-
-    data = spark.read.json(all_json, multiLine=True)
-    data.createOrReplaceTempView("data")
-    return data
-
-
-def get_title_abstract_text(spark, data):
-    # Select text columns
-    covid_sql = spark.sql(
+# Select text columns
+covid_sql = spark.sql(
         """
-            SELECT
-                metadata.title AS title,
-                abstract.text AS abstract, 
-                body_text.text AS body_text,
-                back_matter.text AS back_matter,
-                paper_id
-            FROM data
-            """)
-    return covid_sql
+        SELECT
+            metadata.title AS title,
+            body_text.text AS body_text,
+            paper_id
+        FROM data
+        """)
+
+word_join_f = F.udf(lambda x: [''.join(w) for w in x], StringType())
+covid_sql = covid_sql.withColumn("body_text", word_join_f("body_text"))
+
+# todo - include word count graph here
 
 
-# Adding the Word Count Column
-def add_word_count(data):
-    word_join_f = F.udf(lambda x: [''.join(w) for w in x], StringType())
+# Tokenize the text in the text column
+tokenizer = Tokenizer(inputCol="body_text", outputCol="words")
+token_DataFrame = tokenizer.transform(covid_sql)
 
-    data_df = data.withColumn("abstract", word_join_f("abstract"))
-    data_df = data_df.withColumn("body_text", word_join_f("body_text"))
+# Remove stopwords
+remover = StopWordsRemover(inputCol="words", outputCol="filtered")
+cleaned_DataFrame = remover.transform(token_DataFrame)
 
-    # see https://stackoverflow.com/questions/48927271/count-number-of-words-in-a-spark-dataframe
-    data_df = data_df.withColumn('wordCount_abstract', F.size(F.split(F.col('abstract'), ' ')))
-    data_df = data_df.withColumn('wordCount_body_text', F.size(F.split(F.col('body_text'), ' ')))
+# Count vectorizer
+cv_tmp = CountVectorizer(inputCol="filtered", outputCol="features")
+cvmodel = cv_tmp.fit(cleaned_DataFrame)
+df_vect = cvmodel.transform(cleaned_DataFrame)
 
-    return data_df
-
-
-def main():
-    root_path = '../data/archive/'
-    spark = init_spark()
-    meta_data = read_metadata(root_path, spark)
-    json_files = read_json_files(root_path, spark)
-    data = get_title_abstract_text(spark, json_files)
-    data_wc = add_word_count(data)
-    data_wc.show()
-    data_wc.limit(100).toPandas()[['wordCount_abstract', 'wordCount_body_text']] \
-        .plot(kind='box',
-              title='Boxplot of Word Count',
-              figsize=(10, 6))
-    plt.show()
+# todo - need to add id column here?
 
 
-if __name__ == '__main__':
-    main()
+# Fit the LDA Model
+num_topics = 10
+max_iterations = 50
+lda = LDA(seed=1, optimizer="em", k=num_topics, maxIter=max_iterations)
+lda_model = lda.fit(df_vect)
+
+# Get terms per topic
+topics = lda_model.topicsMatrix()
+vocabArray = cvmodel.vocabulary
+
+wordNumbers = 15  # number of words per topic
+topicIndices = lda_model.describeTopics(maxTermsPerTopic = wordNumbers).rdd.map(tuple)
+
+
+def topic_render(topic):  # specify vector id of words to actual words
+    terms = topic[1]
+    result = []
+    for i in range(wordNumbers):
+        term = vocabArray[terms[i]]
+        result.append(term)
+    return result
+
+topics_final = topicIndices.map(lambda topic: topic_render(topic)).collect()
+
+for topic in range(len(topics_final)):
+    print ("Topic" + str(topic) + ":")
+    for term in topics_final[topic]:
+        print (term)
+    print ('\n')
