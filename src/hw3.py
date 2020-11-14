@@ -27,13 +27,13 @@ Reading this data with pyspark - done
 https://www.kaggle.com/jonathanbesomi/cord-19-sources-unification-with-pyspark-sql
 """
 
-import matplotlib.pyplot as plt
-
-plt.style.use('ggplot')
 import glob
 
+from pyspark.ml.clustering import LDA
+from pyspark.ml.feature import CountVectorizer, Tokenizer
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from pyspark.sql.functions import monotonically_increasing_id
 from pyspark.sql.types import StringType
 
 
@@ -60,46 +60,55 @@ def read_json_files(root_path, spark):
 
 def get_title_abstract_text(spark, data):
     # Select text columns
+    # todo - add more columns
     covid_sql = spark.sql(
         """
             SELECT
-                metadata.title AS title,
-                abstract.text AS abstract, 
                 body_text.text AS body_text,
-                back_matter.text AS back_matter,
                 paper_id
             FROM data
             """)
     return covid_sql
 
 
-# Adding the Word Count Column
-def add_word_count(data):
-    word_join_f = F.udf(lambda x: [''.join(w) for w in x], StringType())
-
-    data_df = data.withColumn("abstract", word_join_f("abstract"))
-    data_df = data_df.withColumn("body_text", word_join_f("body_text"))
-
-    # see https://stackoverflow.com/questions/48927271/count-number-of-words-in-a-spark-dataframe
-    data_df = data_df.withColumn('wordCount_abstract', F.size(F.split(F.col('abstract'), ' ')))
-    data_df = data_df.withColumn('wordCount_body_text', F.size(F.split(F.col('body_text'), ' ')))
-
-    return data_df
+def parseVectors(line):
+    return [int(line[1]), line[0]]
 
 
 def main():
     root_path = '../data/archive/'
     spark = init_spark()
-    meta_data = read_metadata(root_path, spark)
     json_files = read_json_files(root_path, spark)
     data = get_title_abstract_text(spark, json_files)
-    data_wc = add_word_count(data)
-    data_wc.show()
-    data_wc.limit(100).toPandas()[['wordCount_abstract', 'wordCount_body_text']] \
-        .plot(kind='box',
-              title='Boxplot of Word Count',
-              figsize=(10, 6))
-    plt.show()
+
+    word_join_f = F.udf(lambda x: [''.join(w) for w in x], StringType())
+    data_df = data.withColumn("body_text", word_join_f("body_text"))
+
+    # Tokenize the text in the text column
+    tokenizer = Tokenizer(inputCol="body_text", outputCol="words")
+    wordsDataFrame = tokenizer.transform(data_df)
+    wordsDataFrame.toPandas()
+
+    # Count vectorizer
+    cv_tmp = CountVectorizer(inputCol="words", outputCol="features")
+    cvmodel = cv_tmp.fit(wordsDataFrame)
+    df_vect = cvmodel.transform(wordsDataFrame)
+
+    # todo - need to add id column here?
+    df_vect = df_vect.select("*").withColumn("id", monotonically_increasing_id())
+
+    # n_components=50, random_state=0
+    num_topics = 10
+    max_iterations = 50
+    # Train the LDA model, set seed?
+    lda = LDA(seed=1, optimizer="em", k=num_topics, maxIter=max_iterations)
+    model = lda.fit(df_vect)
+
+    wordNumbers = 10  # number of words per topic
+    topicIndices = model.describeTopics(maxTermsPerTopic=wordNumbers)
+    topicIndices.show()
+
+    print(model)
 
 
 if __name__ == '__main__':
