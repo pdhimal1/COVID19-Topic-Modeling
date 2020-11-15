@@ -39,10 +39,7 @@ from pyspark import SparkConf, SparkContext
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType
 from pyspark.ml.feature import CountVectorizer, Tokenizer, StopWordsRemover
-from pyspark.sql.functions import monotonically_increasing_id
 from pyspark.ml.clustering import LDA
-from pyspark.ml.linalg import Vectors, SparseVector
-from pyspark.sql.functions import col, size
 from time import time
 
 start = time()
@@ -57,7 +54,7 @@ root_path = '../data/archive/'
 all_json = glob.glob(f'{root_path}/**/*.json', recursive=True)
 print("There are ", len(all_json), "sources files.")
 #todo - for now restrict this to 100 files
-all_json = all_json[:5000]
+all_json = all_json[:500]
 
 data = spark.read.json(all_json, multiLine=True)
 data.createOrReplaceTempView("data")
