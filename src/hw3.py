@@ -26,7 +26,7 @@ https://www.kaggle.com/maksimeren/covid-19-literature-clustering
 Reading this data with pyspark - done
 https://www.kaggle.com/jonathanbesomi/cord-19-sources-unification-with-pyspark-sql
 """
-import glob
+import os
 from time import time
 
 from nltk.corpus import stopwords
@@ -45,7 +45,10 @@ def init_spark():
 
 
 def read_json_files(root_path, spark):
-    all_json = glob.glob(f'{root_path}/**/*.json', recursive=True)
+    json_dir = root_path + "document_parses/pdf_json/"
+    filenames = os.listdir(json_dir)
+
+    all_json = [json_dir + filename for filename in filenames]
     # todo - for now restrict this to 100 files
     all_json = all_json[:100]
 
@@ -99,7 +102,7 @@ def main():
 
     # clean the data
     word_clean_up_F = F.udf(lambda x: clean_up(x), StringType())
-    data = data.withColumn("body_text", word_clean_up_F("body_text_cleaned"))
+    data = data.withColumn("body_text_cleaned", word_clean_up_F("body_text"))
 
     tokenizer = Tokenizer(inputCol="body_text_cleaned", outputCol="words")
     token_DataFrame = tokenizer.transform(data)
