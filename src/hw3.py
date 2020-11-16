@@ -167,6 +167,7 @@ def main():
     # Data Visualization
     data = format_data_to_pyldavis(cleaned_DataFrame, cvmodel, lda_transformed, lda_model)
     py_lda_prepared_data = pyLDAvis.prepare(**data)
+    pyLDAvis.save_html(py_lda_prepared_data, "data-viz.html")
     pyLDAvis.show(py_lda_prepared_data)
 
     print("Completed in {} min".format((time() - start) / 60))
