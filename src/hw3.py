@@ -94,6 +94,7 @@ def clean_up(document):
     joined = [' '.join(w) for w in cleaned]
     return joined
 
+
 def format_data_to_pyldavis(cleaned_DataFrame, cvmodel, lda_transformed, lda_model):
     counts = cleaned_DataFrame.select((explode(cleaned_DataFrame.filtered)).alias("tokens")).groupby("tokens").count()
     wc = {i['tokens']: i['count'] for i in counts.collect()}
@@ -107,26 +108,6 @@ def format_data_to_pyldavis(cleaned_DataFrame, cvmodel, lda_transformed, lda_mod
             'term_frequency': wc}
 
     return data
-
-# todo - need to change this code - straight from stackoverflow
-def filter_bad_docs(data):
-    bad = 0
-    doc_topic_dists_filtrado = []
-    doc_lengths_filtrado = []
-
-    for x,y in zip(data['doc_topic_dists'], data['doc_lengths']):
-        if np.sum(x)==0:
-            bad+=1
-        elif np.sum(x) != 1:
-            bad+=1
-        elif np.isnan(x).any():
-            bad+=1
-        else:
-            doc_topic_dists_filtrado.append(x)
-            doc_lengths_filtrado.append(y)
-
-    data['doc_topic_dists'] = doc_topic_dists_filtrado
-    data['doc_lengths'] = doc_lengths_filtrado
 
 
 def main():
@@ -185,9 +166,8 @@ def main():
 
     # Data Visualization
     data = format_data_to_pyldavis(cleaned_DataFrame, cvmodel, lda_transformed, lda_model)
-    filter_bad_docs(data)
     py_lda_prepared_data = pyLDAvis.prepare(**data)
-    pyLDAvis.display(py_lda_prepared_data)
+    pyLDAvis.show(py_lda_prepared_data)
 
     print("Completed in {} min".format((time() - start) / 60))
 
