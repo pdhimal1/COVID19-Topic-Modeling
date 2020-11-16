@@ -37,6 +37,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.functions import explode, size
 from pyspark.sql.types import StringType
 import pyLDAvis
+from nltk import PorterStemmer
 
 stop_words = set(stopwords.words('english'))
 
@@ -82,10 +83,12 @@ def topic_render(topic, wordNumbers, vocabArray):  # specify vector id of words 
 
 
 def clean_up_sentences(sentence):
+    stemmer = PorterStemmer()
     matches = [word for word in sentence.split(' ') if word.isalnum()]
     matches = [word.lower() for word in matches]
     matches = [word for word in matches if word not in stop_words]
-    matches = [word for word in matches if len(word) >= 3]
+    matches = [stemmer.stem(word) for word in matches]
+    matches = [word for word in matches if len(word) >= 4]
     return matches
 
 
