@@ -11,7 +11,7 @@ Assignment 3: Topic Modeling
     * `hw3.py` -> source code for homework 3
   * `report` directory
     * `report.pdf`
-  * `output` directory
+  * `out` directory
     * Few output files produced by this program
   * `data`
     * Data directory containing the data obtained to work with this assignment
