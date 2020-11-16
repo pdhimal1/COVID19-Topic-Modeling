@@ -28,13 +28,15 @@ https://www.kaggle.com/jonathanbesomi/cord-19-sources-unification-with-pyspark-s
 """
 import os
 from time import time
-
+import numpy as np
 from nltk.corpus import stopwords
 from pyspark.ml.clustering import LDA
-from pyspark.ml.feature import CountVectorizer, Tokenizer, StopWordsRemover
+from pyspark.ml.feature import CountVectorizer, Tokenizer, StopWordsRemover, IDF
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from pyspark.sql.functions import explode, size
 from pyspark.sql.types import StringType
+import pyLDAvis
 
 stop_words = set(stopwords.words('english'))
 
@@ -92,6 +94,40 @@ def clean_up(document):
     joined = [' '.join(w) for w in cleaned]
     return joined
 
+def format_data_to_pyldavis(cleaned_DataFrame, cvmodel, lda_transformed, lda_model):
+    counts = cleaned_DataFrame.select((explode(cleaned_DataFrame.filtered)).alias("tokens")).groupby("tokens").count()
+    wc = {i['tokens']: i['count'] for i in counts.collect()}
+    wc = [wc[x] for x in cvmodel.vocabulary]
+
+
+    data = {'topic_term_dists': np.array(lda_model.topicsMatrix().toArray()).T,
+            'doc_topic_dists': np.array([x.toArray() for x in lda_transformed.select(["topicDistribution"]).toPandas()['topicDistribution']]),
+            'doc_lengths': [x[0] for x in cleaned_DataFrame.select(size(cleaned_DataFrame.filtered)).collect()],
+            'vocab': cvmodel.vocabulary,
+            'term_frequency': wc}
+
+    return data
+
+# todo - need to change this code - straight from stackoverflow
+def filter_bad_docs(data):
+    bad = 0
+    doc_topic_dists_filtrado = []
+    doc_lengths_filtrado = []
+
+    for x,y in zip(data['doc_topic_dists'], data['doc_lengths']):
+        if np.sum(x)==0:
+            bad+=1
+        elif np.sum(x) != 1:
+            bad+=1
+        elif np.isnan(x).any():
+            bad+=1
+        else:
+            doc_topic_dists_filtrado.append(x)
+            doc_lengths_filtrado.append(y)
+
+    data['doc_topic_dists'] = doc_topic_dists_filtrado
+    data['doc_lengths'] = doc_lengths_filtrado
+
 
 def main():
     start = time()
@@ -104,6 +140,7 @@ def main():
     word_clean_up_F = F.udf(lambda x: clean_up(x), StringType())
     data = data.withColumn("body_text_cleaned", word_clean_up_F("body_text"))
 
+    # tokenize documents
     tokenizer = Tokenizer(inputCol="body_text_cleaned", outputCol="words")
     token_DataFrame = tokenizer.transform(data)
 
@@ -112,15 +149,23 @@ def main():
     cleaned_DataFrame = remover.transform(token_DataFrame)
 
     # Count vectorizer
-    cv_tmp = CountVectorizer(inputCol="filtered", outputCol="features")
+    cv_tmp = CountVectorizer(inputCol="filtered", outputCol="count_features")
     cvmodel = cv_tmp.fit(cleaned_DataFrame)
-    df_vect = cvmodel.transform(cleaned_DataFrame)
+    count_dataframe = cvmodel.transform(cleaned_DataFrame)
+
+    # TF-IDF Vectorizer
+    tfidf = IDF(inputCol="count_features", outputCol="features")
+    tfidfmodel = tfidf.fit(count_dataframe)
+    tfidf_dataframe = tfidfmodel.transform(count_dataframe)
+
 
     # Fit the LDA Model
     num_topics = 10
     max_iterations = 50
     lda = LDA(seed=1, optimizer="em", k=num_topics, maxIter=max_iterations)
-    lda_model = lda.fit(df_vect)
+    lda_model = lda.fit(tfidf_dataframe)
+    lda_transformed = lda_model.transform(tfidf_dataframe
+                                          )
     print("done fitting")
     # joblib.dump(lda_model, 'lda.csv')
 
@@ -136,6 +181,13 @@ def main():
     for topic in range(len(topics_final)):
         print("Topic" + str(topic) + ":")
         print(topics_final[topic])
+
+
+    # Data Visualization
+    data = format_data_to_pyldavis(cleaned_DataFrame, cvmodel, lda_transformed, lda_model)
+    filter_bad_docs(data)
+    py_lda_prepared_data = pyLDAvis.prepare(**data)
+    pyLDAvis.display(py_lda_prepared_data)
 
     print("Completed in {} min".format((time() - start) / 60))
 
