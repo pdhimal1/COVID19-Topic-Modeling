@@ -16,7 +16,6 @@ from time import time
 import numpy as np
 import pyLDAvis
 from nltk.corpus import stopwords
-from pyspark import SparkContext
 from pyspark.ml.clustering import LDA
 from pyspark.ml.feature import CountVectorizer, Tokenizer, StopWordsRemover, IDF
 from pyspark.sql import SparkSession
@@ -28,13 +27,11 @@ stop_words = set(stopwords.words('english'))
 
 
 def init_spark():
-    SparkContext.setSystemProperty('spark.local.dir', '/home/dhimal/spark')
+    # SparkContext.setSystemProperty('spark.local.dir', '<>')
     spark = SparkSession.builder \
         .master("local") \
-        .config("spark.executor.memory", "32g") \
-        .config("spark.driver.memory", "32g") \
-        .config("spark.memory.offHeap.enabled", True) \
-        .config("spark.memory.offHeap.size", "100g") \
+        .config("spark.executor.memory", "16g") \
+        .config("spark.driver.memory", "16g") \
         .appName("hw3") \
         .getOrCreate()
     return spark
