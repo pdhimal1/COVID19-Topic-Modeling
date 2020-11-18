@@ -121,8 +121,8 @@ def clean_up(document):
 
 def main(root_path):
     timeStamp = str(int(time()))
-    # todo
-    num = 100
+    # todo change this for full run
+    num = 1000  # 128915 is the total
     out_file_name = '../out/output-' + timeStamp + "-" + str(num) + '.txt'
     out_file = open(out_file_name, 'w')
 
