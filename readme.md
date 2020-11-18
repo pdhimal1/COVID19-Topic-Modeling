@@ -28,7 +28,7 @@ Full dataset run for 5, 7, and 10 topics are included in this directory.
 This program depends on data in the `data/archive/` directory. The size of the data for this assignment
 was simply too large (`>23GB`) to be included here. We recommend that the `archive` directory from Kaggle be placed
 in `data/` directory to successfully run this program. You may change the `data_path = '../data/archive/'` line
-(line 212) in `hw3.py`.
+[line 208] in [hw3.py](src/hw3.py).
 
 #### Dependency:
 This python program depends on the following modules:
