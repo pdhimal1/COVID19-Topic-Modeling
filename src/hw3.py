@@ -189,10 +189,6 @@ def main(root_path):
     print("LDA runtime : {} min. ".format((lda_end - lda_start) / 60))
     print("Check" + out_file.name)
 
-    # cleaned_DataFrame.write.csv('cleaned_DataFrame' + timeStamp + "-" + str(num) + '.csv')
-    # cvmodel.save('cvmodel' + timeStamp + "-" + str(num) + '.csv')
-    # lda_transformed.write.csv('lda_transformed' + timeStamp + "-" + str(num) + '.csv')
-    # lda_model.write.csv('lda_model' + timeStamp + "-" + str(num) + '.csv')
     cleaned_DataFrame.cache()
     lda_transformed.cache()
 
